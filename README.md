@@ -17,6 +17,7 @@ source .venv/bin/activate
 .venv\Scripts\activate
 
 # Instalar dependências
+cd server
 pip install -r requirements.txt
 
 # Servidor 

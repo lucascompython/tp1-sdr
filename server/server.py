@@ -3,6 +3,7 @@ import socket
 import socketserver
 import sys
 from pathlib import Path
+from typing import Type
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -21,8 +22,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
         self.server: ThreadedTCPServer
 
         self.username = self.authenticate_user()
-
-        self.server.users[self.username] = self.request
 
         self.broadcast_message(
             JoinPacket(username=self.username, type=PacketType.JOIN.value)
@@ -48,10 +47,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
             )
 
     def authenticate_user(self) -> str:
-        username: bytes = self.request.recv(1024).strip()
-        return username.decode()
+        username: bytes = self.request.recv(1024).strip().decode()
+        self.server.users[username] = self.request
+        return username
 
-    def broadcast_message(self, packet: BasePacket, exclude_user: bool = True) -> None:
+    def broadcast_message(
+        self, packet: Type[BasePacket], exclude_user: bool = True
+    ) -> None:
         """Sends a message to all connected users.
 
         Args:
