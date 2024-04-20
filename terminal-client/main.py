@@ -84,10 +84,11 @@ def main() -> None:
                     "message": message,
                 }
 
-                sock.sendall(json.dumps(packet).encode())
-
                 if message.lower() in ("/exit", "/quit", "/q", "/e"):
                     break
+
+                sock.sendall(json.dumps(packet).encode())
+
         except KeyboardInterrupt:
             print("\nClosing connection...")
         finally:
