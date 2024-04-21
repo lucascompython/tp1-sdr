@@ -1,6 +1,7 @@
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.exceptions import InvalidSignature
 
 
 def generate_key_pair() -> tuple[rsa.RSAPrivateKey, rsa.RSAPublicKey]:
@@ -68,12 +69,16 @@ def sign(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
     )
 
 
-def verify(signature: bytes, data: bytes, key: rsa.RSAPublicKey) -> None:
-    key.verify(
-        signature,
-        data,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
-        ),
-        hashes.SHA256(),
-    )
+def verify(signature: bytes, data: bytes, key: rsa.RSAPublicKey) -> bool:
+    try:
+        key.verify(
+            signature,
+            data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256(),
+        )
+        return True
+    except InvalidSignature:
+        return False
