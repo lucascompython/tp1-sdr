@@ -1,10 +1,10 @@
 import json
+import os
 import socket
 import sys
 import threading
-from pathlib import Path
-import os
 from collections import deque
+from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from shared import MessagePacket, PacketType
@@ -78,16 +78,12 @@ def main() -> None:
                 message = input(f"{padding + username}> ")
                 messages.append(f"{username}: {message}")
 
-                packet: MessagePacket = {
-                    "type": PacketType.MESSAGE.value,
-                    "username": username,
-                    "message": message,
-                }
+                packet = MessagePacket(username=username, message=message)
 
                 if message.lower() in ("/exit", "/quit", "/q", "/e"):
                     break
 
-                sock.sendall(json.dumps(packet).encode())
+                sock.sendall(packet.to_json().encode())
 
         except KeyboardInterrupt:
             print("\nClosing connection...")

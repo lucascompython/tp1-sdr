@@ -7,7 +7,7 @@ from typing import Type
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from shared import BasePacket, JoinPacket, LeavePacket, PacketType
+from shared import BasePacket, JoinPacket, LeavePacket, MessagePacket, PacketType
 
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
@@ -33,9 +33,10 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 if not data:
                     break
 
-                packet: BasePacket = json.loads(data.decode())
+                packet = json.loads(data.decode())
                 if packet["type"] == PacketType.MESSAGE.value:
-                    print(f"Received data from {self.username}: {packet['message']}")
+                    packet = MessagePacket.from_json(data)
+                    print(f"Received data from {self.username}: {packet.message}")
 
                     self.broadcast_message(packet)
 
@@ -62,4 +63,4 @@ class TCPHandler(socketserver.BaseRequestHandler):
         """
         for user, sock in self.server.users.items():
             if user != self.username or not exclude_user:
-                sock.sendall(json.dumps(packet).encode())
+                sock.sendall(packet.to_json().encode())

@@ -1,5 +1,5 @@
+import json
 from enum import Enum
-from typing import TypedDict
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -14,28 +14,79 @@ class PacketType(Enum):
     CHANGE_ROOM = 5
 
 
-class BasePacket(TypedDict):
+class BasePacket:
     type: PacketType
     username: str
 
+    def __init__(self, type: PacketType, username: str):
+        self.type = type
+        self.username = username
+
+    def to_json(self) -> str:
+        return json.dumps(self.__dict__)
+
+    @classmethod
+    def from_json(cls, data: str) -> "BasePacket":
+        return cls(**json.loads(data))
+
+    def to_message_packet(self) -> "MessagePacket":
+        return MessagePacket(username=self.username, message=self.message)
+
+    def to_change_room_packet(self) -> "ChangeRoomPacket":
+        return ChangeRoomPacket(username=self.username, room=self.room)
+
+    def to_nickname_packet(self) -> "NicknamePacket":
+        return NicknamePacket(username=self.username, new_nickname=self.new_nickname)
+
+    def to_join_packet(self) -> "JoinPacket":
+        return JoinPacket(username=self.username)
+
+    def to_leave_packet(self) -> "LeavePacket":
+        return LeavePacket(username=self.username)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.__dict__})"
+
 
 class MessagePacket(BasePacket):
-    type = PacketType.MESSAGE.value
-    message: str
+    def __init__(
+        self, username: str, message: str, type: PacketType = PacketType.MESSAGE.value
+    ):
+        super().__init__(type=type, username=username)
+
+        self.message = message
 
 
 class ChangeRoomPacket(BasePacket):
-    type = PacketType.CHANGE_ROOM.value
-    room: str
+    def __init__(
+        self,
+        username: str,
+        room: str,
+        type: PacketType = PacketType.CHANGE_ROOM.value,
+    ):
+        super().__init__(type=type, username=username)
+        self.room = room
 
 
 class NicknamePacket(BasePacket):
-    type = PacketType.NICKNAME.value
-    new_nickname: str
+    def __init__(
+        self,
+        username: str,
+        new_nickname: str,
+        type: PacketType = PacketType.NICKNAME.value,
+    ):
+        super().__init__(type=type, username=username)
+        self.new_nickname = new_nickname
 
 
-JoinPacket = BasePacket
-LeavePacket = BasePacket
+class JoinPacket(BasePacket):
+    def __init__(self, username: str, type: PacketType = PacketType.JOIN.value):
+        super().__init__(type=type, username=username)
+
+
+class LeavePacket(BasePacket):
+    def __init__(self, username: str, type: PacketType = PacketType.LEAVE.value):
+        super().__init__(type=type, username=username)
 
 
 def generate_key_pair() -> tuple[rsa.RSAPrivateKey, rsa.RSAPublicKey]:
