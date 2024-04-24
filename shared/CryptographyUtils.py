@@ -75,7 +75,7 @@ def encrypt(data: bytes, key: rsa.RSAPublicKey) -> bytes:
 
 
 def decrypt(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
-    if len(data) > 251:
+    if len(data) > 256:
         return _decrypt_chunks(data, key)
     return _decrypt(data, key)
 
