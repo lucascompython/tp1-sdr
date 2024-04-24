@@ -136,17 +136,7 @@ def client_join(
     private_key: RSAPrivateKey,
 ) -> list[RSAPublicKey]:
 
-    # Send the public key to the server
-    # sock.sendall(
-    #     CryptographyUtils.serialize_public_key(public_key)
-    #     + b"MORRE LONGE SEU FILHO DE #= putas"
-    # )
-
     Packets.send_with_length(sock, CryptographyUtils.serialize_public_key(public_key))
-
-    # Send the encrypted username and signature to the server
-    # TODO: create a "login" packet to send the username and signature to the server
-    # sock.sendall(encrypted_username + username_signature)
 
     # Receive all the public keys from the server
     clients_public_keys, _ = Packets.recv_with_length(sock)
