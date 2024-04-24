@@ -1,66 +1,57 @@
+import base64
 import json
-import socket
 import socketserver
 import sys
 from pathlib import Path
-from typing import Type
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from shared import BasePacket, JoinPacket, LeavePacket, MessagePacket, PacketType
+from shared import Packets
 
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.users: dict[str, socket.socket] = {}
+        self.clients: dict[bytes, bytes] = {}
 
 
 class TCPHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
         self.server: ThreadedTCPServer
 
-        self.username = self.authenticate_user()
-
-        self.broadcast_message(
-            JoinPacket(username=self.username, type=PacketType.JOIN.value)
-        )
+        self.authenticate_user()
 
         try:
             while True:
-                data: bytes = self.request.recv(1024).strip()
+                data, _ = Packets.recv_with_length(self.request)
                 if not data:
                     break
 
-                packet = json.loads(data.decode())
-                if packet["type"] == PacketType.MESSAGE.value:
-                    packet = MessagePacket.from_json(data)
-                    print(f"Received data from {self.username}: {packet.message}")
-
-                    self.broadcast_message(packet)
+                self.broadcast_message(data)
 
         finally:
-            del self.server.users[self.username]
+            del self.server.clients[self.public_key]
 
-            self.broadcast_message(
-                LeavePacket(username=self.username, type=PacketType.LEAVE.value)
-            )
+    def authenticate_user(self) -> None:
+        self.public_key, _ = Packets.recv_with_length(self.request)
+        self.server.clients[self.public_key] = self.request
 
-    def authenticate_user(self) -> str:
-        username: bytes = self.request.recv(1024).strip().decode()
-        self.server.users[username] = self.request
-        return username
+        public_keys = [
+            base64.b64encode(key).decode()
+            for key in self.server.clients
+            if key != self.public_key
+        ]
 
-    def broadcast_message(
-        self, packet: Type[BasePacket], exclude_user: bool = True
-    ) -> None:
+        Packets.send_with_length(self.request, json.dumps(public_keys).encode())
+
+    def broadcast_message(self, message: bytes) -> None:
         """Sends a message to all connected users.
 
         Args:
             message (bytes): The message to send.
             exclude_user (bool, optional): If True, will send the message to all the users except itself. If False, sends to all users. Defaults to True.
         """
-        for user, sock in self.server.users.items():
-            if user != self.username or not exclude_user:
-                sock.sendall(packet.to_json().encode())
+        for client_pk, sock in self.server.clients.items():
+            if client_pk != self.public_key:
+                Packets.send_with_length(sock, message)

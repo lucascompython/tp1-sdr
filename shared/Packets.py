@@ -1,4 +1,6 @@
+import base64
 import json
+import socket
 from enum import Enum
 
 
@@ -8,6 +10,8 @@ class PacketType(Enum):
     LEAVE = 3
     NICKNAME = 4
     CHANGE_ROOM = 5
+    STATUS_REQUEST = 6
+    STATUS = 7
 
 
 class BasePacket:
@@ -76,10 +80,60 @@ class NicknamePacket(BasePacket):
 
 
 class JoinPacket(BasePacket):
-    def __init__(self, username: str, type: PacketType = PacketType.JOIN.value):
+    def __init__(
+        self, username: str, public_key: bytes, type: PacketType = PacketType.JOIN.value
+    ):
         super().__init__(type=type, username=username)
+        self.public_key = base64.b64encode(public_key).decode()
 
 
 class LeavePacket(BasePacket):
     def __init__(self, username: str, type: PacketType = PacketType.LEAVE.value):
         super().__init__(type=type, username=username)
+
+
+class StatusRequestPacket(BasePacket):
+    def __init__(
+        self, username: str, type: PacketType = PacketType.STATUS_REQUEST.value
+    ):
+        super().__init__(type=type, username=username)
+
+
+class StatusPacket(BasePacket):
+    def __init__(
+        self,
+        username: str,
+        online_users: str,
+        type: PacketType = PacketType.STATUS.value,
+    ):
+        super().__init__(type=type, username=username)
+        self.online_users = online_users
+
+
+class MessageType(Enum):
+    GLOBAL = 0
+    DIRECT = 1
+
+
+def send_with_length(
+    sock: socket.socket,
+    data: bytes,
+    type: MessageType = MessageType.GLOBAL.value,
+    public_key: bytes = None,
+) -> None:
+    type_length = type.to_bytes(1, "big")  # type is an int here
+
+    if type == MessageType.DIRECT.value and public_key:
+        data = public_key + data
+
+    length = len(data).to_bytes(4, "big")
+
+    sock.sendall(length + type_length + data)
+
+
+def recv_with_length(
+    sock: socket.socket,
+) -> tuple[bytes, bool]:
+    length = int.from_bytes(sock.recv(4), "big")
+    is_direct = bool(int.from_bytes(sock.recv(1), "big"))
+    return sock.recv(length), is_direct

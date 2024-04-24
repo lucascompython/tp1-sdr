@@ -2,6 +2,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.exceptions import InvalidSignature
+import hashlib
 
 
 def generate_key_pair() -> tuple[rsa.RSAPrivateKey, rsa.RSAPublicKey]:
@@ -37,7 +38,7 @@ def deserialize_public_key(data: bytes) -> rsa.RSAPublicKey:
     return serialization.load_pem_public_key(data, backend=default_backend())
 
 
-def encrypt(data: bytes, key: rsa.RSAPublicKey) -> bytes:
+def _encrypt(data: bytes, key: rsa.RSAPublicKey) -> bytes:
     return key.encrypt(
         data,
         padding.OAEP(
@@ -48,7 +49,7 @@ def encrypt(data: bytes, key: rsa.RSAPublicKey) -> bytes:
     )
 
 
-def decrypt(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
+def _decrypt(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
     return key.decrypt(
         data,
         padding.OAEP(
@@ -57,6 +58,26 @@ def decrypt(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
             label=None,
         ),
     )
+
+
+def _encrypt_chunks(data: bytes, key: rsa.RSAPublicKey) -> bytes:
+    return b"".join(_encrypt(data[i : i + 190], key) for i in range(0, len(data), 190))
+
+
+def _decrypt_chunks(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
+    return b"".join(_decrypt(data[i : i + 256], key) for i in range(0, len(data), 256))
+
+
+def encrypt(data: bytes, key: rsa.RSAPublicKey) -> bytes:
+    if len(data) > 190:
+        return _encrypt_chunks(data, key)
+    return _encrypt(data, key)
+
+
+def decrypt(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
+    if len(data) > 251:
+        return _decrypt_chunks(data, key)
+    return _decrypt(data, key)
 
 
 def sign(data: bytes, key: rsa.RSAPrivateKey) -> bytes:
