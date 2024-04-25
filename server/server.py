@@ -25,7 +25,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         try:
             while True:
-                data, _ = Packets.recv_with_length(self.request)
+                data = Packets.recv_with_length(self.request)
                 if not data:
                     break
 
@@ -42,7 +42,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
             del self.server.clients[self.public_key]
 
     def authenticate_user(self) -> None:
-        self.public_key, _ = Packets.recv_with_length(self.request)
+        self.public_key = Packets.recv_with_length(self.request)
         self.server.clients[self.public_key] = self.request
 
         public_keys = [

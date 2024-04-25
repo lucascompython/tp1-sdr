@@ -10,3 +10,7 @@ class Colors:
     UNDERLINE = "\033[4m"
     BOLD = "\033[1m"
     ITALIC = "\033[3m"
+
+    @staticmethod
+    def color_underline_user(username: str, msg, color: str) -> str:
+        return f"{Colors.UNDERLINE + color + username + Colors.RESET + color} {msg}{Colors.RESET}"

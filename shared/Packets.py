@@ -48,11 +48,16 @@ class BasePacket:
 
 class MessagePacket(BasePacket):
     def __init__(
-        self, username: str, message: str, type: PacketType = PacketType.MESSAGE.value
+        self,
+        username: str,
+        message: str,
+        dm: bool = False,
+        type: PacketType = PacketType.MESSAGE.value,
     ):
         super().__init__(type=type, username=username)
 
         self.message = message
+        self.dm = dm
 
 
 class ChangeRoomPacket(BasePacket):
@@ -112,26 +117,17 @@ class StatusPacket(BasePacket):
         super().__init__(type=type, username=username)
 
 
-class MessageType(Enum):
-    GLOBAL = 0
-    DIRECT = 1
-
-
 def send_with_length(
     sock: socket.socket,
     data: bytes,
-    type: MessageType = MessageType.GLOBAL.value,
 ) -> None:
-    type_length = type.to_bytes(1, "big")  # type is an int here
-
     length = len(data).to_bytes(4, "big")
 
-    sock.sendall(length + type_length + data)
+    sock.sendall(length + data)
 
 
 def recv_with_length(
     sock: socket.socket,
-) -> tuple[bytes, bool]:
+) -> bytes:
     length = int.from_bytes(sock.recv(4), "big")
-    is_direct = bool(int.from_bytes(sock.recv(1), "big"))
-    return sock.recv(length), is_direct
+    return sock.recv(length)
