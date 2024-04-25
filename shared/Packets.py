@@ -121,12 +121,8 @@ def send_with_length(
     sock: socket.socket,
     data: bytes,
     type: MessageType = MessageType.GLOBAL.value,
-    public_key: bytes = None,
 ) -> None:
     type_length = type.to_bytes(1, "big")  # type is an int here
-
-    if type == MessageType.DIRECT.value and public_key:
-        data = public_key + data
 
     length = len(data).to_bytes(4, "big")
 

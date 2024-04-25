@@ -83,7 +83,7 @@ def receive_messages(
 
             case Packets.PacketType.STATUS_REQUEST.value:
                 status_packet = Packets.StatusPacket(username=username)
-                send_packet(sock, status_packet, private_key, public_keys)
+                send_direct_message(sock, status_packet, private_key, pk)
 
             case Packets.PacketType.MESSAGE.value:
                 messages.append(
@@ -119,7 +119,12 @@ def send_direct_message(
     encrypted_packet = CryptographyUtils.encrypt(packet.to_json().encode(), public_key)
     signature = CryptographyUtils.sign(encrypted_packet, private_key)
 
-    Packets.send_with_length(sock, encrypted_packet + signature)
+    Packets.send_with_length(
+        sock,
+        CryptographyUtils.serialize_public_key(public_key)
+        + encrypted_packet
+        + signature,
+    )
 
 
 def send_packet(
