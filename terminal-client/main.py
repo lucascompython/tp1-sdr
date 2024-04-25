@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from shared import CryptographyUtils, Packets
-import colors
+from colors import Colors
 
 
 HOST, PORT = "localhost", 12345
@@ -53,20 +53,30 @@ def receive_messages(
                 if pk not in public_keys:
                     public_keys.append(CryptographyUtils.deserialize_public_key(pk))
 
-                messages.append(f"{json_decoded['username']} has joined the chat.")
+                messages.append(
+                    f"{Colors.GREEN}{json_decoded['username']} has joined the chat.{Colors.RESET}"
+                )
 
             case Packets.PacketType.STATUS.value:
                 if json_decoded["username"] not in usernames:
                     usernames.append(json_decoded["username"])
 
-                messages.append(f"Users online: {', '.join(usernames)}")
+                if messages and messages[-1].startswith(Colors.CYAN):
+                    messages[-1] = (
+                        f"{Colors.CYAN}Online users: {', '.join(usernames)}{Colors.RESET}"
+                    )
+
+                else:
+                    messages.append(
+                        f"{Colors.CYAN}Online users: {', '.join(usernames)}{Colors.RESET}"
+                    )
 
         index = usernames.index(json_decoded["username"])
         pk = public_keys[index]
         # fake_random_signature = b"0" * 256
         if not CryptographyUtils.verify(signature, data, pk):
             messages.append(
-                f"{colors.Colors.RED}Invalid signature from {json_decoded['username']}{colors.Colors.RESET}"
+                f"{Colors.RED}Invalid signature from {json_decoded['username']}{Colors.RESET}"
             )
 
         match json_decoded["type"]:
@@ -91,7 +101,9 @@ def receive_messages(
                         public_keys.pop(i)
                         break
 
-                messages.append(f"{json_decoded['username']} has left the chat.")
+                messages.append(
+                    f"{Colors.YELLOW}{json_decoded['username']} has left the chat.{Colors.RESET}"
+                )
 
         clear_screen()
         padding = term_size.lines - len(messages) - 1
@@ -190,7 +202,9 @@ def main() -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((HOST, PORT))
 
-        username = input("Enter your username: ")
+        username = ""
+        while not username:
+            username = input("Enter your username: ").strip()
 
         clients_public_keys = client_join(sock, username, public_key, private_key)
 
@@ -218,8 +232,14 @@ def main() -> None:
 
                 print("\n".join(messages))
 
-                message = input(f"{padding + username}> ")
-                messages.append(f"{username}: {message}")
+                message = input(f"{padding + username}> ").strip()
+
+                if not message:
+                    continue
+
+                messages.append(
+                    f"{Colors.UNDERLINE + username + Colors.RESET}: {message}"
+                )
 
                 message = message.lower().strip()
                 if message in ("/exit", "/quit", "/q", "/e"):
