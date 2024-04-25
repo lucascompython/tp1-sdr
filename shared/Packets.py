@@ -15,8 +15,6 @@ class PacketType(Enum):
 
 
 class BasePacket:
-    type: PacketType
-    username: str
 
     def __init__(self, type: PacketType, username: str):
         self.type = type
@@ -88,8 +86,14 @@ class JoinPacket(BasePacket):
 
 
 class LeavePacket(BasePacket):
-    def __init__(self, username: str, type: PacketType = PacketType.LEAVE.value):
+    def __init__(
+        self,
+        username: str,
+        public_key: bytes,
+        type: PacketType = PacketType.LEAVE.value,
+    ):
         super().__init__(type=type, username=username)
+        self.public_key = base64.b64encode(public_key).decode()
 
 
 class StatusRequestPacket(BasePacket):
@@ -103,11 +107,9 @@ class StatusPacket(BasePacket):
     def __init__(
         self,
         username: str,
-        online_users: str,
         type: PacketType = PacketType.STATUS.value,
     ):
         super().__init__(type=type, username=username)
-        self.online_users = online_users
 
 
 class MessageType(Enum):

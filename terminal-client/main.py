@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from shared import CryptographyUtils, Packets
+import colors
+
 
 HOST, PORT = "localhost", 12345
 
@@ -38,18 +40,20 @@ def receive_messages(
             break
 
         data, signature = data[:-256], data[-256:]
-
         decrypted_data = CryptographyUtils.decrypt(data, private_key)
 
         json_decoded = json.loads(decrypted_data)
 
         match json_decoded["type"]:
+            case Packets.PacketType.JOIN.value:
+                if json_decoded["username"] not in usernames:
+                    usernames.append(json_decoded["username"])
 
-            case Packets.PacketType.STATUS_REQUEST.value:
-                status_packet = Packets.StatusPacket(
-                    username=username, online_users=username
-                )
-                send_packet(sock, status_packet, private_key, public_keys)
+                pk = base64.b64decode(json_decoded["public_key"])
+                if pk not in public_keys:
+                    public_keys.append(CryptographyUtils.deserialize_public_key(pk))
+
+                messages.append(f"{json_decoded['username']} has joined the chat.")
 
             case Packets.PacketType.STATUS.value:
                 if json_decoded["username"] not in usernames:
@@ -57,30 +61,37 @@ def receive_messages(
 
                 messages.append(f"Users online: {', '.join(usernames)}")
 
+        index = usernames.index(json_decoded["username"])
+        pk = public_keys[index]
+        # fake_random_signature = b"0" * 256
+        if not CryptographyUtils.verify(signature, data, pk):
+            messages.append(
+                f"{colors.Colors.RED}Invalid signature from {json_decoded['username']}{colors.Colors.RESET}"
+            )
+
+        match json_decoded["type"]:
+
+            case Packets.PacketType.STATUS_REQUEST.value:
+                status_packet = Packets.StatusPacket(username=username)
+                send_packet(sock, status_packet, private_key, public_keys)
+
             case Packets.PacketType.MESSAGE.value:
                 messages.append(
                     f"{json_decoded['username']}: {json_decoded['message']}"
                 )
 
             case Packets.PacketType.LEAVE.value:
+                if json_decoded["username"] in usernames:
+                    usernames.remove(json_decoded["username"])
+
+                pk = base64.b64decode(json_decoded["public_key"])
+
+                for i, key in enumerate(public_keys):
+                    if CryptographyUtils.serialize_public_key(key) == pk:
+                        public_keys.pop(i)
+                        break
+
                 messages.append(f"{json_decoded['username']} has left the chat.")
-
-            case Packets.PacketType.JOIN.value:
-
-                if json_decoded["username"] not in usernames:
-                    usernames.append(json_decoded["username"])
-
-                if json_decoded["public_key"] not in public_keys:
-                    public_keys.append(
-                        CryptographyUtils.deserialize_public_key(
-                            base64.b64decode(json_decoded["public_key"])
-                        )
-                    )
-
-                messages.append(f"{json_decoded['username']} has joined the chat.")
-
-            case _:
-                messages.append(json_decoded)
 
         clear_screen()
         padding = term_size.lines - len(messages) - 1
@@ -125,8 +136,13 @@ def send_packet(
         CryptographyUtils.sign(data, private_key) for data in encrypted_packets
     ]
 
-    for encrypted_packet, signature in zip(encrypted_packets, signatures):
-        Packets.send_with_length(sock, encrypted_packet + signature)
+    for encrypted_packet, signature, key in zip(
+        encrypted_packets, signatures, public_keys
+    ):
+        Packets.send_with_length(
+            sock,
+            CryptographyUtils.serialize_public_key(key) + encrypted_packet + signature,
+        )
 
 
 def client_join(
@@ -207,6 +223,7 @@ def main() -> None:
 
                 message = message.lower().strip()
                 if message in ("/exit", "/quit", "/q", "/e"):
+                    print("Closing connection...")
                     break
                 elif message == "/status":
                     status_request = Packets.StatusRequestPacket(username=username)
@@ -220,6 +237,11 @@ def main() -> None:
         except KeyboardInterrupt:
             print("\nClosing connection...")
         finally:
+            leave_packet = Packets.LeavePacket(
+                username=username,
+                public_key=CryptographyUtils.serialize_public_key(public_key),
+            )
+            send_packet(sock, leave_packet, private_key, clients_public_keys)
             sock.close()
 
 

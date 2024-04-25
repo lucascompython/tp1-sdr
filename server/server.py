@@ -1,5 +1,6 @@
 import base64
 import json
+import socket
 import socketserver
 import sys
 from pathlib import Path
@@ -13,7 +14,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.clients: dict[bytes, bytes] = {}
+        self.clients: dict[bytes, socket.socket] = {}
 
 
 class TCPHandler(socketserver.BaseRequestHandler):
@@ -28,7 +29,14 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 if not data:
                     break
 
-                self.broadcast_message(data)
+                public_key = data[:451]
+
+                if public_key not in self.server.clients:
+                    continue
+
+                Packets.send_with_length(self.server.clients[public_key], data[451:])
+
+                # self.broadcast_message(data)
 
         finally:
             del self.server.clients[self.public_key]
