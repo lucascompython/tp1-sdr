@@ -6,14 +6,13 @@ import sys
 import threading
 from collections import deque
 from pathlib import Path
-from typing import Type
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from shared import CryptographyUtils, Packets
 from colors import Colors
 
+from shared import CryptographyUtils, Packets
 
 HOST, PORT = "localhost", 12345
 CURRENT_CHAT: str | None = None  # None for global chat, username for private chat
@@ -47,6 +46,7 @@ def receive_messages(
     public_keys: list[RSAPublicKey],
     usernames: list[str],
 ) -> None:
+    global CURRENT_CHAT
     while True:
         data = Packets.recv_with_length(sock)
         if not data:
@@ -62,9 +62,11 @@ def receive_messages(
                 if json_decoded["username"] not in usernames:
                     usernames.append(json_decoded["username"])
 
-                pk = base64.b64decode(json_decoded["public_key"])
+                pk = CryptographyUtils.deserialize_public_key(
+                    base64.b64decode(json_decoded["public_key"])
+                )
                 if pk not in public_keys:
-                    public_keys.append(CryptographyUtils.deserialize_public_key(pk))
+                    public_keys.append(pk)
 
                 messages.append(
                     Colors.color_underline_user(
@@ -98,7 +100,7 @@ def receive_messages(
 
             case Packets.PacketType.STATUS_REQUEST.value:
                 status_packet = Packets.StatusPacket(username=username)
-                send_direct_message(sock, status_packet, private_key, pk)
+                Packets.send_direct_message(sock, status_packet, private_key, pk)
 
             case Packets.PacketType.MESSAGE.value:
                 prefix = ""
@@ -116,6 +118,9 @@ def receive_messages(
             case Packets.PacketType.LEAVE.value:
                 if json_decoded["username"] in usernames:
                     usernames.remove(json_decoded["username"])
+
+                if json_decoded["username"] == CURRENT_CHAT:
+                    CURRENT_CHAT = None
 
                 pk = base64.b64decode(json_decoded["public_key"])
 
@@ -136,89 +141,6 @@ def receive_messages(
         print("\n".join(messages) + "\n" * padding + f"\n{username}> ", end="")
 
 
-def send_direct_message(
-    sock: socket.socket,
-    packet: Type[Packets.BasePacket],
-    private_key: RSAPrivateKey,
-    public_key: RSAPublicKey,
-) -> None:
-    encrypted_packet = CryptographyUtils.encrypt(packet.to_json().encode(), public_key)
-    signature = CryptographyUtils.sign(encrypted_packet, private_key)
-
-    Packets.send_with_length(
-        sock,
-        CryptographyUtils.serialize_public_key(public_key)
-        + encrypted_packet
-        + signature,
-    )
-
-
-def send_packet(
-    sock: socket.socket,
-    packet: Type[Packets.BasePacket],
-    private_key: RSAPrivateKey,
-    public_keys: list[RSAPublicKey],
-):
-    """Sends an encrypted packet with a signature to the server
-
-    Args:
-        sock (socket.socket): The socket to send the packet to
-        packet (Type[Packets.BasePacket]): The packet to send
-        private_key (RSAPrivateKey): The private key to sign the packet
-        public_keys (list[RSAPublicKey]): The public keys to encrypt the packet
-    """
-
-    if not public_keys:
-        return
-
-    encrypted_packets = [
-        CryptographyUtils.encrypt(packet.to_json().encode(), key) for key in public_keys
-    ]
-
-    signatures = [
-        CryptographyUtils.sign(data, private_key) for data in encrypted_packets
-    ]
-
-    for encrypted_packet, signature, key in zip(
-        encrypted_packets, signatures, public_keys
-    ):
-        Packets.send_with_length(
-            sock,
-            CryptographyUtils.serialize_public_key(key) + encrypted_packet + signature,
-        )
-
-
-def client_join(
-    sock: socket.socket,
-    username: str,
-    public_key: RSAPublicKey,
-    private_key: RSAPrivateKey,
-) -> list[RSAPublicKey]:
-
-    Packets.send_with_length(sock, CryptographyUtils.serialize_public_key(public_key))
-
-    # Receive all the public keys from the server
-    clients_public_keys = Packets.recv_with_length(sock)
-
-    # Load the public keys
-    clients_public_keys: list[bytes] = json.loads(clients_public_keys)
-
-    clients_public_keys = [
-        CryptographyUtils.deserialize_public_key(base64.b64decode(key))
-        for key in clients_public_keys
-    ]
-
-    join_packet = Packets.JoinPacket(
-        username=username, public_key=CryptographyUtils.serialize_public_key(public_key)
-    )
-    send_packet(sock, join_packet, private_key, clients_public_keys)
-
-    status_request = Packets.StatusRequestPacket(username=username)
-    send_packet(sock, status_request, private_key, clients_public_keys)
-
-    return clients_public_keys
-
-
 def main() -> None:
     global CURRENT_CHAT
     clear_screen()
@@ -236,7 +158,9 @@ def main() -> None:
         while not username:
             username = input("Enter your username: ").strip()
 
-        clients_public_keys = client_join(sock, username, public_key, private_key)
+        clients_public_keys = Packets.client_join(
+            sock, username, public_key, private_key
+        )
 
         receive_thread = threading.Thread(
             target=receive_messages,
@@ -279,7 +203,9 @@ def main() -> None:
                     break
                 elif message == "/status":
                     status_request = Packets.StatusRequestPacket(username=username)
-                    send_packet(sock, status_request, private_key, clients_public_keys)
+                    Packets.send_packet(
+                        sock, status_request, private_key, clients_public_keys
+                    )
                     continue
                 elif message.startswith("/dm"):
                     message, user = message.split(" ")
@@ -313,12 +239,12 @@ def main() -> None:
                     )
                     index = usernames.index(CURRENT_CHAT)
                     pk = clients_public_keys[index]
-                    send_direct_message(sock, message_packet, private_key, pk)
+                    Packets.send_direct_message(sock, message_packet, private_key, pk)
                     continue
 
                 packet = Packets.MessagePacket(username=username, message=message)
 
-                send_packet(sock, packet, private_key, clients_public_keys)
+                Packets.send_packet(sock, packet, private_key, clients_public_keys)
 
         except KeyboardInterrupt:
             print("\nClosing connection...")
@@ -327,7 +253,7 @@ def main() -> None:
                 username=username,
                 public_key=CryptographyUtils.serialize_public_key(public_key),
             )
-            send_packet(sock, leave_packet, private_key, clients_public_keys)
+            Packets.send_packet(sock, leave_packet, private_key, clients_public_keys)
             sock.close()
 
 

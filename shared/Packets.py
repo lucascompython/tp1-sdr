@@ -3,6 +3,12 @@ import json
 import socket
 from enum import Enum
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from typing import Type
+
+
+from shared import CryptographyUtils
+
 
 class PacketType(Enum):
     MESSAGE = 1
@@ -30,12 +36,6 @@ class BasePacket:
     def to_message_packet(self) -> "MessagePacket":
         return MessagePacket(username=self.username, message=self.message)
 
-    def to_change_room_packet(self) -> "ChangeRoomPacket":
-        return ChangeRoomPacket(username=self.username, room=self.room)
-
-    def to_nickname_packet(self) -> "NicknamePacket":
-        return NicknamePacket(username=self.username, new_nickname=self.new_nickname)
-
     def to_join_packet(self) -> "JoinPacket":
         return JoinPacket(username=self.username)
 
@@ -58,28 +58,6 @@ class MessagePacket(BasePacket):
 
         self.message = message
         self.dm = dm
-
-
-class ChangeRoomPacket(BasePacket):
-    def __init__(
-        self,
-        username: str,
-        room: str,
-        type: PacketType = PacketType.CHANGE_ROOM.value,
-    ):
-        super().__init__(type=type, username=username)
-        self.room = room
-
-
-class NicknamePacket(BasePacket):
-    def __init__(
-        self,
-        username: str,
-        new_nickname: str,
-        type: PacketType = PacketType.NICKNAME.value,
-    ):
-        super().__init__(type=type, username=username)
-        self.new_nickname = new_nickname
 
 
 class JoinPacket(BasePacket):
@@ -131,3 +109,86 @@ def recv_with_length(
 ) -> bytes:
     length = int.from_bytes(sock.recv(4), "big")
     return sock.recv(length)
+
+
+def send_direct_message(
+    sock: socket.socket,
+    packet: Type[BasePacket],
+    private_key: RSAPrivateKey,
+    public_key: RSAPublicKey,
+) -> None:
+    encrypted_packet = CryptographyUtils.encrypt(packet.to_json().encode(), public_key)
+    signature = CryptographyUtils.sign(encrypted_packet, private_key)
+
+    send_with_length(
+        sock,
+        CryptographyUtils.serialize_public_key(public_key)
+        + encrypted_packet
+        + signature,
+    )
+
+
+def send_packet(
+    sock: socket.socket,
+    packet: Type[BasePacket],
+    private_key: RSAPrivateKey,
+    public_keys: list[RSAPublicKey],
+):
+    """Sends an encrypted packet with a signature to the server
+
+    Args:
+        sock (socket.socket): The socket to send the packet to
+        packet (Type[Packets.BasePacket]): The packet to send
+        private_key (RSAPrivateKey): The private key to sign the packet
+        public_keys (list[RSAPublicKey]): The public keys to encrypt the packet
+    """
+
+    if not public_keys:
+        return
+
+    encrypted_packets = [
+        CryptographyUtils.encrypt(packet.to_json().encode(), key) for key in public_keys
+    ]
+
+    signatures = [
+        CryptographyUtils.sign(data, private_key) for data in encrypted_packets
+    ]
+
+    for encrypted_packet, signature, key in zip(
+        encrypted_packets, signatures, public_keys
+    ):
+        send_with_length(
+            sock,
+            CryptographyUtils.serialize_public_key(key) + encrypted_packet + signature,
+        )
+
+
+def client_join(
+    sock: socket.socket,
+    username: str,
+    public_key: RSAPublicKey,
+    private_key: RSAPrivateKey,
+) -> list[RSAPublicKey]:
+
+    send_with_length(sock, CryptographyUtils.serialize_public_key(public_key))
+
+    # Receive all the public keys from the server
+    clients_public_keys = recv_with_length(sock)
+
+    # Load the public keys
+    clients_public_keys: list[bytes] = json.loads(clients_public_keys)
+
+    clients_public_keys = [
+        CryptographyUtils.deserialize_public_key(base64.b64decode(key))
+        for key in clients_public_keys
+    ]
+
+    join_packet = JoinPacket(
+        username=username, public_key=CryptographyUtils.serialize_public_key(public_key)
+    )
+    send_packet(sock, join_packet, private_key, clients_public_keys)
+
+    status_request = StatusRequestPacket(username=username)
+    send_packet(sock, status_request, private_key, clients_public_keys)
+
+    return clients_public_keys
