@@ -30,33 +30,36 @@
           </ul>
         </div>
         <!-- Área de Conversa -->
-        <div class="col-md-9">
-          <div class="container">
-            <h3 class="text-center">Global Chat</h3>
+        <div
+          class="col-md-9"
+          style="height: 100vh; display: flex; flex-direction: column"
+        >
+          <div class="container" style="overflow-y: auto; flex-grow: 1">
+            <h3 class="text-center">Conversa com Usuário</h3>
             <!-- Área de exibição das mensagens -->
             <div class="card mb-3">
               <div class="card-body">
-                <p class="card-text">Message 1</p>
+                <p class="card-text">Mensagem do Usuário 1</p>
               </div>
             </div>
-            <!-- Formulário para enviar mensagem -->
-            <form class="container">
-              <div class="mb-3 row">
-                <div class="col-11">
-                  <input
-                    class="form-control"
-                    rows="3"
-                    placeholder="Digite sua mensagem..."
-                  />
-                </div>
-                <div class="col-1">
-                  <button type="submit" class="btn btn-primary w-100">
-                    Send
-                  </button>
-                </div>
-              </div>
-            </form>
           </div>
+          <!-- Formulário para enviar mensagem -->
+          <form class="container mb-3">
+            <div class="row">
+              <div class="col-11">
+                <input
+                  class="form-control"
+                  rows="3"
+                  placeholder="Digite sua mensagem..."
+                />
+              </div>
+              <div class="col-1">
+                <button type="submit" class="btn btn-primary w-100">
+                  Enviar
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>
