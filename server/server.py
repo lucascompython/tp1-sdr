@@ -36,8 +36,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
                 Packets.send_with_length(self.server.clients[public_key], data[451:])
 
-                # self.broadcast_message(data)
-
         finally:
             del self.server.clients[self.public_key]
 
